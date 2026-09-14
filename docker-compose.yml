@@ -1,0 +1,148 @@
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+    volumes:
+      - ${MEDIA_ROOT}/qbittorrent/config:/config
+      - ${MEDIA_ROOT}/downloads/torrents:/downloads
+    ports:
+      - 8080:8080
+      - 6881:6881
+      - 6881:6881/udp
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    depends_on:
+      - qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${MEDIA_ROOT}/radarr/appdata/config:/config
+      - ${MEDIA_ROOT}/downloads/torrents:/downloads
+      - ${MEDIA_ROOT}/videos/radarr/movies:/movies
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    depends_on:
+      - qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${MEDIA_ROOT}/sonarr/appdata/config:/config
+      - ${MEDIA_ROOT}/videos/sonarr:/tv
+      - ${MEDIA_ROOT}/downloads/torrents:/downloads
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    volumes:
+      - ${MEDIA_ROOT}/flaresolverr/config:/config
+    ports:
+      - 8191:8191
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    depends_on:
+      - flaresolverr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${MEDIA_ROOT}/prowlarr/config:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+
+  seerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    container_name: seerr
+    depends_on:
+      - qbittorrent
+    environment:
+      - TZ=${TZ}
+      - PORT=5055
+    ports:
+      - 5055:5055
+    volumes:
+      - ${MEDIA_ROOT}/seerr/config:/app/config
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/settings/public || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 3
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+  bazarr:
+    image: ghcr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ${MEDIA_ROOT}/videos/radarr/movies:/movies
+      - ${MEDIA_ROOT}/videos/sonarr:/tv
+      - ${MEDIA_ROOT}/bazarr/appdata/config:/config
+    ports:
+      - 6767:6767
+
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: plex
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - VA_DRIVER=IHD
+      - PLEX_HW_TRANS_MAX=16
+    volumes:
+      - ${MEDIA_ROOT}/plex/config:/config
+      - ${MEDIA_ROOT}/plex/data:/data
+      - ${MEDIA_ROOT}/plex/transcode:/transcode
+      - ${MEDIA_ROOT}/videos:/media
+    devices:
+      - /dev/dri:/dev/dri
+    network_mode: host
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+    ports:
+      - 8096:8096
+    volumes:
+      - ${MEDIA_ROOT}/jellyfin/config:/config
+      - ${MEDIA_ROOT}/jellyfin/cache:/cache
+      - ${MEDIA_ROOT}/videos:/media
+    devices:
+      - /dev/dri:/dev/dri
